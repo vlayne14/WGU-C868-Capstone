@@ -1,0 +1,152 @@
+﻿using System;
+using System.Data;
+using System.Linq;
+using System.Windows.Forms;
+using MySql.Data.MySqlClient;
+using SimpleBook.Database;
+
+namespace SimpleBook
+{
+
+	public partial class Add_Appointment : Form
+	{
+		
+		private Main LastForm;
+		private int selectedApptID = -1;
+
+		public Add_Appointment(Main lastForm)
+		{
+			InitializeComponent();
+			LastForm = lastForm;
+		}
+
+		
+		public void comboBox()
+		{
+			string sqlQuery = "SELECT DISTINCT customerId from customer";
+			var conn = ConnectToDB.newConnection();
+			MySqlDataAdapter da = new MySqlDataAdapter(sqlQuery, conn);
+			DataSet dt = new DataSet();
+			da.Fill(dt, "customerId");
+			customerIDComboBox.DisplayMember = "customerId";
+			customerIDComboBox.ValueMember = "customerId";
+			customerIDComboBox.DataSource = dt.Tables["customerId"];
+			if (customerIDComboBox.Items.Count > 1)
+			{
+				customerIDComboBox.SelectedIndex = -1;
+			}
+		}
+
+		//close button clicked
+		private void addApptCloseButton_Click(object sender, EventArgs e)
+		{
+			this.Close();
+
+		}
+
+		//save button clicked
+		private void addApptSaveButton_Click(object sender, EventArgs e)
+		{
+			try
+			{
+				DateTime now = DateTime.Now;
+				//business hours
+				TimeSpan businessOpen = new DateTime(now.Year, now.Month, now.Day, 9, 0, 0).TimeOfDay;
+				TimeSpan businessClose = new DateTime(now.Year, now.Month, now.Day, 18, 0, 0).TimeOfDay;
+				int selectedCustomerID = Int32.Parse(((DataRowView)customerIDComboBox.SelectedItem).Row["customerId"].ToString());
+				string title = titleText.Text.ToString();
+				string typeSelected = typeComboBox.SelectedItem.ToString();
+				DateTime selectedStartDate = startDatePicker.Value;
+				DateTime selectedEndDate = endDatePicker.Value;
+				bool overlap = false;
+
+				//overlapping appointments
+				foreach (var appt in Main.apptList)
+				{
+					if (appt.startDate <= selectedStartDate && appt.endDate > selectedStartDate && (!(selectedApptID >= 0)) || selectedApptID >= 0)
+					{
+						overlap = true;
+					}
+					if (selectedStartDate <= appt.startDate && selectedEndDate > appt.startDate && (!(selectedApptID >= 0)) || selectedApptID >= 0)
+					{
+						overlap = true;
+					}
+				}
+
+
+				if (overlap)
+				{
+					throw new ApplicationException("Appointment times cannot overlap.");
+				}
+
+				//customer must be selected
+				if (customerIDComboBox.SelectedItem == null)
+				{
+					throw new NullReferenceException("Please select a customer.");
+				}
+
+				//title must be added
+				if (titleText.Text == "")
+				{
+					throw new ApplicationException("Appointments must have a title.");
+				}
+
+				//selecting an end date that is before the start date
+				if (selectedStartDate > selectedEndDate)
+				{
+					throw new ApplicationException("The start time must be before the end time.");
+				}
+
+				//selecting a time outside of business hours
+				if ((selectedStartDate.TimeOfDay < businessOpen) || (selectedStartDate.TimeOfDay > businessClose) ||
+					(selectedEndDate.TimeOfDay < businessOpen) || (selectedEndDate.TimeOfDay > businessClose))
+				{
+					throw new ApplicationException("Appointments cannot be scheduled outside of the business hours of 9am - 6pm");
+				}
+
+
+				SQL_Data.addAppt(selectedCustomerID, title, typeSelected, selectedStartDate, selectedEndDate);
+
+				this.Close();
+			}
+			//if appointment type is not selected
+			catch (NullReferenceException)
+			{
+				MessageBox.Show("Please ensure both the customer field and the appointment type field are valid.", "Instructions", MessageBoxButtons.OK);
+			}
+			catch (ApplicationException err)
+			{
+				MessageBox.Show(err.Message, "Instructions", MessageBoxButtons.OK);
+			}
+			catch (Exception err)
+			{
+				MessageBox.Show(err.Message, "Error", MessageBoxButtons.OK);
+			}
+		}
+
+
+		//start date picker pressed
+		private void startDatePicker_KeyPress(object sender, KeyPressEventArgs e)
+		{
+			e.Handled = true;
+		}
+
+		//end date picker pressed
+		private void endDatePicker_KeyPress(object sender, KeyPressEventArgs e)
+		{
+			e.Handled = true;
+		}
+
+		//form closed
+		private void Add_Appointment_FormClosed_1(object sender, FormClosedEventArgs e)
+		{
+			LastForm.UpdateSelection();
+			LastForm.Show();
+		}
+
+		private void Add_Appointment_Load(object sender, EventArgs e)
+		{
+
+		}
+	}
+}
